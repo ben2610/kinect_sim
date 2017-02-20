@@ -4,15 +4,10 @@ from bge import texture as vt
 import numpy as np
 import time
 
-# target of offscreen render. Other choice is RAS_OFS_RENDER_TEXTURE
-# alway use RAS_OFS_RENDER_BUFFER when rendering to a buffer, it's faster
-t=bge.render.RAS_OFS_RENDER_BUFFER
 
 # size of the render
 w = 512
 h = 424
-# number of MSAA, 0 to disable
-s = 0
 
 def write_png(buf, width, height):
     import zlib, struct
@@ -31,7 +26,12 @@ def write_png(buf, width, height):
         png_pack(b'IDAT', zlib.compress(raw_data, 9)),
         png_pack(b'IEND', b'')])
 
-
+"""
+# number of MSAA, 0 to disable
+s = 0
+# target of offscreen render. Other choice is RAS_OFS_RENDER_TEXTURE
+# alway use RAS_OFS_RENDER_BUFFER when rendering to a buffer, it's faster
+t=bge.render.RAS_OFS_RENDER_BUFFER
 def init_fbo(cont):
     obj = cont.owner
     scene = logic.getCurrentScene()
@@ -68,7 +68,22 @@ def run_fbo(cont):
     obj['fc'] += 1
     if obj['fc'] == 10:
         bge.logic.endGame()
+"""
 
+class CameraTable:
+    def __init__(self, filename="xy_table.dat"):
+        self.width = 512
+        self.height = 424
+
+        xy_table = np.loadtxt(filename)
+
+        self.x_table = np.reshape(xy_table[:, 0], (self.height, self.width))
+        self.y_table = np.reshape(xy_table[:, 1], (self.height, self.width))
+    
+    def apply(self, pcl_z):
+        x = self.x_table*pcl_z
+        y = self.y_table*pcl_z
+        return x, y
 
 def init_2df(cont):
     obj = cont.owner
@@ -80,7 +95,7 @@ def init_2df(cont):
     # we only capture the central part of the image
     iv.capsize = (w,h)
     obj['iv'] = iv
-    obj['ref'] = time.perf_counter();
+    obj['ref'] = time.perf_counter()
     # transfer camera near and far value to object properties so that the shader can use them
     obj['near'] = cam.near
     obj['far'] = cam.far
@@ -97,7 +112,7 @@ def init_2df(cont):
     cont.script = __name__+'.run_noop'
 
 def run_noop(cont):
-    obj = cont.owner;
+    obj = cont.owner
     obj['time'] = time.perf_counter() - obj['ref']
 
 def run_2df(cont):
