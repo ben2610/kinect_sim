@@ -107,7 +107,8 @@ def init_2df(cont):
     # to stop after x frames
     obj['fc'] = 0
     # we need to activate just once the 2D filter
-    cont.activate("postproc")
+    cont.activate("noise")
+    cont.activate("filter")
     # on next frame execute run_2df()
     cont.script = __name__+'.run_noop'
 

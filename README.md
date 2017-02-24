@@ -33,18 +33,19 @@ https://drive.google.com/open?id=0Bw6tWmtzO4Kpd3BHMGlnZUtxWHc
 ```
 let (h,w) = (510,610) the size of the blender frame buffer.
 let (cx,cy) the lens principal point expressed in kinect pixel value.
-let fov = 40 the field of view of the blender camera (in degree).
-let (x,y) = value from the xy_table
-          = tangent of the X and Y deviation of the ray to the Z axis of the camera
-Compute focal distance (factor to convert tangent to pixel):
+let fov = 40 the half field of view of the blender camera (in degree).
+let (x,y) = value from the xy_table, one pair for each camera pixel
+            Physical meaning of x,y is the tangent of angle between the ray that hit the camera pixel and the camera Z axis. It is the tangent of the angle projected onto the X (Y) axis that form the x (y) value.
+
+Compute focal distance of blender (factor to convert tangent to pixel):
 f = w/2/tan(fov) = 363.485
 Compute the principal point in blender pixel unit:
-Cx = cx+(w-424)/2 = cx+49
-Cy = cx+(h-512)/2 = cx+43
-Convert (x,y) in pixel in frame buffer:
+Cx = cx+(w-512)/2 = cx+49
+Cy = cx+(h-424)/2 = cx+43
+Convert (x,y) in blender pixel units:
 X = f*x+Cx
 Y = f*y+Cy
-Convert to UV coordinates:
+Convert to UV coordinates in frame buffer
 U = X/w
 V = Y/h
 ```
@@ -52,23 +53,22 @@ V = Y/h
 
 * __time_of_flight.blend__
 
-  Main blend file. It must be executed by the blenderplayer with alpha on frame buffer to ensure full 32 bit output:
+  Main blend file. It must be executed by the blenderplayer with alpha enabled to ensure full 32 bit output:
   > `# /path/to/modified/blenderplayer -a /path/to/time_of_flight.blend`
 
-  The field of view of camera and size of the framebuffer is computed as follow:
+  The field of view of camera and size of the framebuffer were set according to these formulas:
 
-  > min/max value from xy_table.dat  = min/max tangent of rays coming from the scene and reaching the kinect detector. The field of view can be deduced: approx(-37,+37) in X axis and (-32,+32) in Y axis, that are extended to (-40,+40) and (-35,+35) respectively in blender to make sure 100% of the kinect field of view is covered.
+  > min/max value from xy_table.dat  = min/max tangent of rays coming from the scene and reaching the kinect detector. The field of view can be deduced: approx(-37,+37) in X axis and (-32,+32) in Y axis, that are extended to (-40,+40) and (-35,+35) respectively in blender to make sure 100% of the kinect field of view is covered. => camera field of view is 80.
 
-  > The undistorted kinect angular pixel size can be compute with the xy_table.dat near the principal point: it is simply the delta X and Y values in the X and Y directions near the principal point = 0.002743 in both X and Y direction (kinect pixels are square).
+  > The undistorted kinect angular pixel size can be compute with the xy_table.dat near the principal point: it is simply the delta x and y values in the X and Y directions respectively near the principal point = 0.002743 in both directions (kinect pixels are square).
 
   > To minimize resampling aliasing during the 2D pass, make sure the blender and kinect angular pixel size are matching => tan(40)/w/2 = 0.002743 => w = 610.
 
   > The height of the framebuffer is derived from the aspect ratio: aspect_ratio = tan(40)/tan(35) =  w/h => h = 510 (round to even value).
 
-
 * __tof.py__
 
-  External python script linked to the blend file and automatically executed at each frame. It set the uniforms and export the framebuffer at each frame to kinect format (TBD).
+  External python script linked to the blend file and automatically executed at each frame. It sets the uniforms and exports the framebuffer at each frame to kinect format (TBD).
 
 * __image/xytable.exr__
 
@@ -78,14 +78,23 @@ V = Y/h
 > - Set color space to non-color to disable color conversion on loading
 > - Declare it as normal map to disable color conversion on uploading to GPU
 > - Make sure the object is slightly in the camera frustrum to force the loading of the textures (if the object is culled, its textures are not even loaded)
+> - In user preference, System panel, tick '16 Bit Float Textures' option. Otherwise blender sends only top 8bit of the texture to the GPU. Note that this option is non effective in the blenderplayer. The option is hardcoded in the blenderplayer of the modified blender package.
 
-* __glsl/tof_noise_bge.glsl__
+* __glsl/white_noise.glsl__
 
-  Main shader for computing the kinect render. Comments inside.
+  shader to generate pure gaussian noise with sigma=50. This is used for the first pass of the 2D filter.
+  This file is linked to the blend file but is not automatically reloaded when the game starts: blender
+  detects the change of the file but does not reload. A manual reload action is necessary inside blender
+  to refresh the text block, then save the blend. 
+
+* __glsl/filter.glsl__
+
+  Second pass of the 2D filter. Outputs the kinext render (comments inside). Same comment about modification.
+  This pass has a convolution filter to generate the noise with spacial correlation. 
 
 ## To Do
 
-* implement realistic noise model (perhaps via another lookup texture)
+* implement realistic convolution noise filter (perhaps via another lookup texture)
 * implement flying pixels and missing pixels algorithm
 * export kinect clean and noisy output at each frame
 * implement game logic to change scene content at each frame
