@@ -1,8 +1,10 @@
 import bge
+import math
 from bge import logic
 from bge import texture as vt
 import numpy as np
 import time
+import terrain
 
 
 # size of the render
@@ -26,64 +28,6 @@ def write_png(buf, width, height):
         png_pack(b'IDAT', zlib.compress(raw_data, 9)),
         png_pack(b'IEND', b'')])
 
-"""
-# number of MSAA, 0 to disable
-s = 0
-# target of offscreen render. Other choice is RAS_OFS_RENDER_TEXTURE
-# alway use RAS_OFS_RENDER_BUFFER when rendering to a buffer, it's faster
-t=bge.render.RAS_OFS_RENDER_BUFFER
-def init_fbo(cont):
-    obj = cont.owner
-    scene = logic.getCurrentScene()
-    detector = scene.cameras['detector']
-    fbo = bge.render.offScreenCreate(w, h, s, t)
-    ir = vt.ImageRender(scene, detector, fbo)
-    # extract the alpha channel too, for best efficiency
-    ir.alpha = True
-    obj['ir'] = ir
-    obj['depth'] = np.zeros((w*h), dtype=np.float32)
-    obj['img'] = np.zeros((w*h*4), dtype=np.uint8)
-    # to stop after x frames
-    obj['fc'] = 0
-    # we don't need the normal BGE render, disable it so that we can compute many frames
-    bge.logic.setRender(False)
-    # on next frame execute run()
-    cont.script = __name__+'.run_fbo'
-
-def run_fbo(cont):
-    obj = cont.owner
-    ir = obj['ir']
-    depth = obj['depth']
-    img = obj['img']
-    # get the depth buffer as float
-    ir.depth = True
-    ir.refresh(depth)
-    # now get the color
-    ir.depth = False
-    ir.refresh(img, "RGBA")
-    # process image buffers here...
-    data = write_png(img, w, h)
-    with open(bge.logic.expandPath("//tof_img_{0}.png".format(obj['fc'])), 'wb') as fb:
-        fb.write(data)
-    obj['fc'] += 1
-    if obj['fc'] == 10:
-        bge.logic.endGame()
-"""
-
-class CameraTable:
-    def __init__(self, filename="xy_table.dat"):
-        self.width = 512
-        self.height = 424
-
-        xy_table = np.loadtxt(filename)
-
-        self.x_table = np.reshape(xy_table[:, 0], (self.height, self.width))
-        self.y_table = np.reshape(xy_table[:, 1], (self.height, self.width))
-    
-    def apply(self, pcl_z):
-        x = self.x_table*pcl_z
-        y = self.y_table*pcl_z
-        return x, y
 
 def init_2df(cont):
     obj = cont.owner
@@ -107,8 +51,11 @@ def init_2df(cont):
     # to stop after x frames
     obj['fc'] = 0
     # we need to activate just once the 2D filter
-    cont.activate("noise")
-    cont.activate("filter")
+    try:
+        cont.activate("noise")
+        cont.activate("filter")
+    except:
+        pass
     # on next frame execute run_2df()
     cont.script = __name__+'.run_noop'
 
@@ -130,5 +77,37 @@ def run_2df(cont):
     if obj['fc'] == 10:
         bge.logic.endGame()
 
+def init_cylinder(cont):
+    obj = cont.owner
+    mesh = obj.meshes[0]
+    vlen = mesh.getVertexArrayLength(0)
+    varr = []   # array of (vertex pos,vertex ref,idx)
+    xquant = 2.0*math.pi/32.0
+    yquant = 0.1
+    for i in range(vlen):
+        v = mesh.getVertex(0, i)
+        p = v.getXYZ()
+        r =  p.length
+        if r > 0.5:
+            ro = math.atan2(p.x, p.y)+math.pi;
+            x = ro // xquant
+            y = p.z // yquant
+            varr.append((p,v,(x,y)))
+    obj['varray'] = varr
+    obj['ref'] = time.perf_counter()
+    cont.script = __name__+'.run_cylinder'
+
+def run_cylinder(cont):
+    if not cont.sensors["pause"].positive:
+        obj = cont.owner
+        t = time.perf_counter() - obj['ref']
+        ter = terrain.generateTerrain(32,23,0.7)
+        for v in obj['varray']:
+            pos = v[0].copy()
+            #k = 1.0+0.2*math.sin(3.0*(pos.z+2.0*t))
+            k = 1.0+ter[v[2][1],v[2][0]]
+            pos.xy *= k
+            v[1].setXYZ(pos)
 
 
+    
