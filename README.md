@@ -20,6 +20,22 @@ A modified version of Blender is required to simulate the lens distortion effect
 
 https://drive.google.com/open?id=0Bw6tWmtzO4Kpd3BHMGlnZUtxWHc
 
+The linux version (Ubuntu 16.04) can be downloaded here:
+
+https://drive.google.com/open?id=0Bw6tWmtzO4KpQm1XYmtoS2Z0R28
+
+Note: this version requires additional shared library that is not likely present in a standard Linux host. The extra libraries can be downloaded here:
+
+https://drive.google.com/open?id=0Bw6tWmtzO4KpWTB2NWE1aFlfZk0
+
+Here is how to use them: create a directory and unzip the library package in it. Then create a small shell script as follow:
+
+```
+#!/bin/bash
+export LD_LIBRARY_PATH=/path/to/directory/with/extra/libraries
+/path/to/blenderplayer -a /path/to/time_of_flight.blend
+```
+
 ## Files
 
 * __xy_table.dat__
@@ -66,9 +82,17 @@ V = Y/h
 
   > The height of the framebuffer is derived from the aspect ratio: aspect_ratio = tan(40)/tan(35) =  w/h => h = 510 (round to even value).
 
+* __terrain.py__
+
+  Fractal terrain generation algorithm translated from javascript (source https://github.com/qiao/fractal-terrain-generator). It produces a NxM numpy array with heights values. Used in __tof.py__ to deform a cylinder (the height is converted to distance to axis).
+
 * __tof.py__
 
   External python script linked to the blend file and automatically executed at each frame. It sets the uniforms and exports the framebuffer at each frame to kinect format (TBD).
+
+  To simulate variance in the scene, a cylinder object is deformed each frame according to the random terrain generation algorithm in __terrain.py__.
+
+  > A vertex shader could not be used because blender does not allow to modify the vertex shader alone. Chaing the vertex in python works because the BGE automatically recomputes the vertex normal at each frame.
 
 * __image/xytable.exr__
 
@@ -82,20 +106,22 @@ V = Y/h
 
 * __glsl/white_noise.glsl__
 
-  shader to generate pure gaussian noise with sigma=50. This is used for the first pass of the 2D filter.
+  shader to generate pure gaussian noise with sigma=50/256. This is used for the first pass of the 2D filter.
   This file is linked to the blend file but is not automatically reloaded when the game starts: blender
   detects the change of the file but does not reload. A manual reload action is necessary inside blender
-  to refresh the text block, then save the blend. 
+  to refresh the text block, then save the blend.
 
 * __glsl/filter.glsl__
 
-  Second pass of the 2D filter. Outputs the kinext render (comments inside). Same comment about modification.
-  This pass has a convolution filter to generate the noise with spacial correlation. 
+  Second pass of the 2D filter. Outputs the kinext render (comments inside). Same comment as above for the modifications made to this file.
+  This pass has a convolution filter to generate the noise with spacial correlation.
+  There is also a method to produce flying pixels and random black pixels on borders of objects.
+
 
 ## To Do
 
-* implement realistic convolution noise filter (perhaps via another lookup texture)
-* implement flying pixels and missing pixels algorithm
-* export kinect clean and noisy output at each frame
+* implement realistic convolution noise filter
+* fine tune flying pixels and black pixels algorithm
+* export kinect noisy and/or clean output at each frame
 * implement game logic to change scene content at each frame
-* calibrate spot
+* calibrate spot position, intensity, field of view and light distribution
